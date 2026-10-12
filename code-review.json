@@ -1,0 +1,33 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": "MED-1",
+      "severity": "MEDIUM",
+      "confidence": "confirmed",
+      "title": "Textbox resize corrupts text geometry (breaks exact round-trip, criterion 13)",
+      "location": "src/lib/canvas/CanvasEngine.ts (setCanvasPxWidth) + src/components/editor/CanvasStage.tsx (ResizeObserver)",
+      "problem": "setCanvasPxWidth multiplies a Textbox's wrapping width by the resize factor on top of multiplying scaleX/scaleY by the same factor, and leaves scaleX/scaleY != 1 on text objects. Rendered width then grows by factor^2 while the font grows by factor, and the next serialize reads fontSize as obj.fontSize/s (ignoring the leftover scaleY) and width via getScaledWidth()/s (over by the factor), so text serializes/reloads at the wrong size. normalizeTextScale only runs on object:modified and compounds the width further. The path is wired to a ResizeObserver on the stage container, so it fires on window resize, orientation change, panel collapse, and mobile keyboard events, violating the 'fontSize/width authoritative, scaleX/scaleY normalized away' contract and the exact round-trip guarantee for text.",
+      "fix": "For a Textbox, scale either width + fontSize (keeping scaleX/scaleY at 1) or only scaleX/scaleY on resize, not both, and re-normalize so no transient scale survives on text objects after setCanvasPxWidth."
+    },
+    {
+      "id": "MED-2",
+      "severity": "MEDIUM",
+      "confidence": "confirmed",
+      "title": "Missing CanvasEngine serialize-round-trip and Textbox-normalization tests required by plan item 13",
+      "location": "src/lib/canvas (only geometry.test.ts present)",
+      "problem": "Plan item 13's verify line requires src/lib/canvas tests for a serialize->loadSide round-trip of a rotated layer (center-origin AABB stable) and Textbox scale normalization. The shipped suite only has geometry.test.ts, which exercises rotatedAABB/isOutOfBounds in isolation and never instantiates the engine. The mandated engine-level cases are absent, and they are exactly what would have caught MED-1. The commit's '22 tests passing' evidence is accurate but does not include these cases.",
+      "fix": "Add engine tests under src/lib/canvas: serialize->loadSide round-trip of a rotated image/sticker layer, Textbox corner-scale normalization on commit, and a resize (setCanvasPxWidth) round-trip for text."
+    },
+    {
+      "id": "NIT-1",
+      "severity": "NIT",
+      "confidence": "confirmed",
+      "title": "Export longest-edge not single-sourced",
+      "location": "src/lib/canvas/CanvasEngine.ts (toArtworkPNG, toMockupPNG) vs src/services/designExport.ts (EXPORT_LONGEST_EDGE)",
+      "problem": "designExport.ts declares EXPORT_LONGEST_EDGE = 2000 per design NIT-1, but the engine recomputes the export scale from a bare literal 2000 in toArtworkPNG and toMockupPNG. Behavior is correct (se = 2000 / viewBox.width everywhere) but the pinned resolution lives in multiple places.",
+      "fix": "Import EXPORT_LONGEST_EDGE from services/designExport.ts in CanvasEngine and derive se from it."
+    }
+  ],
+  "reviewDoc": "d:\\CRAZYCART.IN\\.agents\\tasks\\code-review.md"
+}

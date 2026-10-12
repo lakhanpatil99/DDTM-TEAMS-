@@ -1,0 +1,62 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": "HIGH-1",
+      "severity": "HIGH",
+      "title": "Rotation origin contradicts the exact round-trip geometry claim",
+      "location": "§7.1 vs §9.4 (criterion 13, §9.6, §11.5)",
+      "problem": "§7.1 defines (x,y) as the top-left of the unrotated box with rotation about the box center, but §9.4 loads/commits Fabric objects with 'origin top-left' and angle=rotationDeg. In Fabric a top-left origin rotates about the top-left corner, not the center, so the two sections describe incompatible pivots. For any rotated layer, obj.left/top is the rotated anchor, not the §7.1 top-left, so out-of-bounds detection (§9.6), the print-area artwork crop (§8.2/§11.5), and the review bounds flag misplace/mis-crop it, and the 'exact reopen/side-switch' guarantee (criterion 13 requires rotation preservation) is false.",
+      "fix": "Pick one pivot and make both sections agree. Recommended: use Fabric center origin and store (x,y) as the box center in template units (load left=x*s, top=y*s; commit x=obj.left/s, y=obj.top/s). If (x,y) must remain the unrotated-box top-left, load with center origin and convert left=(x+width/2)*s, top=(y+height/2)*s, converting back on commit. Update §9.6/§11.5 bounds math to compute the rotated AABB from that single definition."
+    },
+    {
+      "id": "MED-1",
+      "severity": "MEDIUM",
+      "title": "Textbox corner-scaling not folded into fontSize/width; text size lost on reload",
+      "location": "§9.4 (criterion 13)",
+      "problem": "The schema stores no scaleX/scaleY and commit reads fontSizeUnits=obj.fontSize/s. Fabric Textbox corner handles change scaleX/scaleY, not fontSize, so a corner-scaled text layer commits the pre-scale font size while rendering fontSize*scaleY tall. On reload fontSize=fontSizeUnits*s with scale discarded, so text reloads at the wrong size, breaking exact preservation for text.",
+      "fix": "Normalize text scale into metrics on commit: on scaling/modified set fontSize=round(obj.fontSize*obj.scaleY), width=obj.width*obj.scaleX, then reset obj.scaleX=obj.scaleY=1 before reading geometry back; or disable corner (uniform-scale) controls for Textbox and allow only side (wrapping width) handles plus the fontSize field. State which in §9.4."
+    },
+    {
+      "id": "MED-2",
+      "severity": "MEDIUM",
+      "title": "Sticker recolor is a named feature with no field in the data model to persist it",
+      "location": "§8.5 vs §7.1 (criterion 27d)",
+      "problem": "§8.5 lists 'recolor-where-the-SVG-allows' for stickers, but stickers serialize as ImageLayer (§7.1), which has no fill/tint/color field. Any applied recolor cannot be serialized and will not survive save/reopen or a side switch; if stickers are flattened to a bitmap blob it is not expressible at all.",
+      "fix": "Either (a) drop the sticker recolor claim (keep move/resize/rotate/opacity/duplicate/delete/reorder, which the model supports) and update §8.5; or (b) add an optional fill?: string to a sticker-specific layer type with a stated rule (sets fill on the sticker SVG's recolor target, applied at load before rasterizing) and specify stickers are kept as parsed/inline SVG, not a flattened bitmap. Pick one explicitly."
+    },
+    {
+      "id": "MED-3",
+      "severity": "MEDIUM",
+      "title": "Sticker storage uses an unresolved 'X or Y' with a correctness trap",
+      "location": "§8.5 (vs §11.3 missing-blob recovery)",
+      "problem": "Stickers are 'promoted into IndexedDB on first use (or referenced by a reserved sticker:<id> blobKey scheme).' The two strategies are not equivalent: the IDB-promotion branch stores a bundled sticker's blob only in the user's IndexedDB, so a data-clear / IDB wipe / private-mode fallback (§11.3) turns a first-party sticker into the missing-blob placeholder, contradicting the never-broken-images posture. The reserved sticker:<id> scheme has no such failure.",
+      "fix": "Commit to the reserved sticker:<id> blobKey scheme: the blob resolver recognizes the sticker: prefix and loads markup from data/stickers.ts / src/assets/stickers directly, never from IndexedDB, so bundled stickers always resolve. Reserve IndexedDB promotion for user-uploaded images only. Remove the 'or'."
+    },
+    {
+      "id": "NIT-1",
+      "severity": "NIT",
+      "title": "Export output resolution / sₑ never pinned to a number",
+      "location": "§11.5 vs §8.6 / §9.4",
+      "problem": "§11.5 says 'fixed export scale' and §9.4 references sₑ without a value; only §8.6 mentions '2000px' in passing. The export dimension is not single-sourced or concrete.",
+      "fix": "State in §11.5: export longest edge = 2000px ⇒ sₑ = 2000 / viewBox.width, as a shared config constant used by both artwork-only and mockup exports."
+    },
+    {
+      "id": "NIT-2",
+      "severity": "NIT",
+      "title": "Inlining the same garment SVG many times produces duplicate element ids",
+      "location": "§8.1 / §8.6",
+      "problem": "Category grid, hero, and showcase inline garment SVGs each carrying id=garment-body (and garment-trim). Duplicate ids in one document are invalid HTML; safe only because queries are ref-scoped and the reference SVG has no url(#id) references. Any future gradient/filter/clipPath url(#id) will cross-wire.",
+      "fix": "Namespace/uniquify ids on inject (prefix per instance and rewrite internal url(#…) refs), or state the invariant: garment SVGs must contain no internal url(#id) refs and recolor targets are matched by a scoped data-recolor attribute, not a document id."
+    },
+    {
+      "id": "NIT-3",
+      "severity": "NIT",
+      "title": "Quantity direct-input validation behavior unspecified",
+      "location": "§12 / §4.5",
+      "problem": "Bounds (1..999) and a Stepper exist, but behavior for typed out-of-range/non-numeric quantity input is unspecified, unlike the thorough rules for upload (§10.1), text (§10.2), and rename (§11.2).",
+      "fix": "Add to §12: quantity input is clamped to [1,999]; non-numeric/empty reverts to the last valid value on blur; totals recompute from the clamped value."
+    }
+  ],
+  "reviewDoc": "d:\\CRAZYCART.IN\\.agents\\tasks\\design-review.md"
+}
